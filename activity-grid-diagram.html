@@ -1,0 +1,197 @@
+<!--
+MIT License
+
+Copyright (c) 2016 University of Derby
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
+		<script type="text/javascript" src="d3.js"></script>
+		<script type="text/javascript" src="jquery-1.11.3.min.js"></script>
+		
+		<style type="text/css">
+			#graphContainer { position: relative; height:720px; }
+			canvas { position: absolute; top: 0; left: 0; }
+			#uiContainer { position: relative; margin-top: 20px;}
+		</style>
+	
+	</head>
+  
+	<body>
+	
+		<div id="graphContainer">
+			<canvas id="graph" width="1800" height="720" style="border:1px solid #000000;"></canvas>
+			<canvas id="overlay" width="1800" height="720" style="border:1px solid #000000;"></canvas>
+		</div>
+		<div id="uiContainer">
+			Choose data to view: <input type="number" id="dataChoice">
+		</div>
+	
+		<script type="text/javascript">
+		
+			//////////////////////////////////////////////////////////
+			// Things to change
+			
+			var filename = "ExampleData.csv";					// Name of csv file to load
+			var units = ["U1", "U2", "U3", "U4", "U5", "U6"]	// Column headings
+			var start = new Date('2016-04-11');					// First date on y axis (course start)
+			var min = 42471;									// Minimum value to show (y axis)
+			var max = 42512;									// Maximum value to show (y axis)
+			var w = 1800;										// Width of visualisation
+			var h = 720;										// Height of visualisation
+			
+			
+			//////////////////////////////////////////////////////////
+			// Things you shouldn't need to change (unless you want to)
+
+			var data = [];			
+			var lc = 0;							// Learner count (# data rows)			
+			var xsp = (w-180)/5;				// Spacing on x axis
+			var scale = (h-120) / (max-min);	// Scaling on y axis
+			var yMajor = 7;						// Days between labels on y axis
+			
+			console.log("Scale " + scale);
+
+			var canvas = document.getElementById('graph');
+			var context = canvas.getContext('2d');
+			
+			var overlay = document.getElementById('overlay');
+			var overlayCxt = overlay.getContext('2d');			
+			
+			
+			// Draw axis
+			context.beginPath();
+			for (var i=0; i<units.length; i++){
+				context.moveTo((i*xsp)+100, 50);
+				context.lineTo((i*xsp)+100, h-70);
+			}
+			context.stroke();
+			
+			
+			// Add horizontal labels
+			// Location based on axis line
+			context.font = '16pt Calibri';
+			for (var i=0; i<units.length; i++){
+				context.fillText(units[i], (i*xsp)+100, 40);
+			}
+			
+			// Add y axis labels
+			var fontOffset = 0;
+			var labelDate = new Date(start);
+			for (var d=1; d<(max-min); d=d+yMajor){
+				
+				context.fillText(labelDate.getDate() + "/" + (labelDate.getMonth()+1), 30, ( (h-70) - (( d ) * scale ) )-fontOffset);
+				
+				context.beginPath();
+				context.moveTo(85, (h-70) - (( d ) * scale ));
+				context.lineTo(100, (h-70) - (( d ) * scale ));
+				//context.lineTo(w-80, (h-70) - (( d ) * scale ));
+				context.stroke();
+				
+				labelDate.setDate(labelDate.getDate() + yMajor );
+			}
+			
+			
+			// ===============================================================
+			//
+			//
+			function drawDataLine( localContext, strokecol, fillcol, lwidth, ly){
+			
+				// Loop again to draw
+				for (var c=0; c<ly.length; c++){
+
+					// Draw from current to next, so stop before last
+					if ( c<ly.length-1 ){
+						
+						// Should the line be drawn?
+						if ( ( ly[c] < h-70) && ( ly[c+1] < h-70) ){
+						
+							if ( (ly[c]>40) && (ly[c+1]>40) ){
+					
+								localContext.beginPath();					// Start drawing line
+								localContext.moveTo( (c*xsp)+100, ly[c]);
+								localContext.lineTo( ((c+1)*xsp)+100, ly[c+1]);
+								localContext.strokeStyle = strokecol;
+								localContext.lineWidth = lwidth;
+								localContext.stroke();						// Finish drawing line
+							}
+						}
+					}
+					
+					// Always draw a circle if badge awarded
+					if ( ( ly[c] < h-70 ) && ( ly[c] > 40 ) ){
+						localContext.beginPath();											// Start drawing circle
+						localContext.arc((c*xsp)+100, ly[c], 4, 0, 2 * Math.PI, false);
+						localContext.fillStyle = fillcol;
+						localContext.fill();												// Finish drawing circle
+					}
+					
+				}
+			}
+			
+			
+			// Draw the data
+			d3.csv(filename, function(learner) {
+				
+				learner.forEach(function(p) {
+				
+					lc++;
+					var y = [];
+					
+					// Loop through units for this learner
+					units.forEach(function(d) {
+						var point = Math.floor(p[d]) - min + 1;
+						y.push( (h-70) - (( point ) * scale ) );
+					});
+					
+					drawDataLine(context, 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.05)', 1.2, y);
+					
+					// Store learner data
+					data.push(y);
+					
+				});
+				
+			}); // End of data
+			
+			
+			// Interactive stuff
+			$('#dataChoice').on('input', function() {
+			
+				var i = $(this).val();
+				if (i<0) i=0;
+				if (i>=data.length) i=data.length-1;
+				$(this).val(i);
+				
+				overlayCxt.clearRect(0, 0, overlay.width, overlay.height);
+				
+				y = data[i];	// Extract data
+
+				drawDataLine(overlayCxt, 'rgba(0,0,0,1.0)', 'rgba(0,0,0,1.0)', 7, y);
+				drawDataLine(overlayCxt, 'rgba(50,200,50,1.0)', 'rgba(50,200,50,1.0)', 5, y);
+			});
+			
+		</script>
+		
+	</body>
+	
+</html>

@@ -1,0 +1,249 @@
+<!--
+MIT License
+
+Copyright (c) 2016 University of Derby
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>State Diagram</title>
+        <script type="text/javascript" src="d3/d3.v3.js"></script>
+		<style>
+			
+		</style>
+    </head>
+    <body>
+			
+        <script type="text/javascript">
+		
+			//////////////////////////////////////////////////////////
+			// Things to change
+			
+			var filename = "ExampleData.csv";					// Name of csv file to load
+			var units = ["U1", "U2", "U3", "U4", "U5", "U6"]	// Column headings
+			var w = 1200;										// Width of visualisation
+			var h = 600;										// Height of visualisation
+			var lowThresh = 0;									// Draw all lines above this tickness
+			
+			
+			
+			//////////////////////////////////////////////////////////
+			// Things you shouldn't need to change (unless you want to)
+					
+			// Dynamically build arrays based on number of units
+			var start 	= [];	// How many started with that unit
+			var finish 	= [];	// How many finished with that unit
+			var did 	= [];	// How many did that unit
+			var links 	= [];	// Jumps to other units
+			for (var i=0; i<units.length; i++){
+			
+				start[i]	= 0;
+				finish[i]	= 0;
+				did[i]		= 0;
+				
+				links[i] =[];
+				for (var j=0; j<units.length; j++){
+					links[i][j] = 0;
+				}
+			}
+		
+		
+			// Create SVG container
+			var svg = d3.select("body")
+						.append("svg")
+						.attr("width", w)
+						.attr("height", h);
+		
+		
+			// Extract data
+			d3.csv(filename, function(learner) {
+				
+				console.log("initial: " + links);
+				
+				// Loop over each learner's data
+				learner.forEach(function(p) {
+					
+					// Copy the data
+					var dc = p;
+					
+					// Store order
+					var orderC = 0;
+					var order = ["", "", "", "", "", ""];
+				
+					// Loop while still values to extract
+					var allBlank = false;
+					var lastID = -1;
+					while (!allBlank){
+
+						var sm = 50000;
+						var smid = -1;
+						var date = ""
+						
+						for (var i=0; i<units.length; i++){
+							
+							date = dc[units[i]];
+							
+							//console.log("loop " + i + " " + date + " < " + sm);
+							
+							if ( (date!="") && (date<sm)){
+								//console.log("Smaller at "+i);
+								sm = dc[units[i]];
+								smid = i;
+							}
+						}
+						
+						if (smid == -1) {
+							allBlank = true;
+							finish[lastID]++;				// Final unit
+							//console.log("-finished");
+						}
+						else{
+							dc[units[smid]] = "";
+							did[smid]++;
+							
+							if (orderC==0) {
+								console.log("-started");
+								start[smid]++;			// First unit
+							}
+							else{
+								links[lastID][smid]++;	// Transition
+								//console.log("-transition " + lastID + " " + smid);
+								//console.log("links "+links);
+							}
+							lastID = smid;
+							orderC++;
+						}
+					}
+
+				});
+	
+				console.log("start "+start);
+				console.log("finish "+finish);
+				console.log("did "+did);
+				console.log("links "+links);
+				
+				// Line function??
+				var bezierLine = d3.svg.line()
+					.x(function(d) { return d[0]; })
+					.y(function(d) { return d[1]; })
+					.interpolate("basis");
+				
+				// Create scale
+				var scale = d3.scale.linear()
+							.domain( [0, did[0] ] )
+							.range( [0, w/14] );
+				
+				// Need to loop over this to draw the connection
+				for (var pa=0; pa<units.length; pa++){
+					for (var pb=0; pb<units.length; pb++){	
+					
+						// Ignore self
+						if (pa != pb){
+						
+							var midpoint = (((pa+1)*(w/7)) + ((pb+1)*(w/7)))/2;
+				
+							if ( links[pa][pb]>0 ){
+								var strokeSize = scale(links[pa][pb]);
+								if ( strokeSize<lowThresh ) strokeSize = lowThresh;
+								svg.append('path')
+									.attr("d", bezierLine([[(pa+1)*(w/7), h/2], [midpoint, (h/2)+((h/10)*(pa-pb))], [(pb+1)*(w/7), h/2]])) 	// start, mid-point, end; mid-point height depends on gap between pa and pb
+									.attr("stroke", "rgba(100, 100, 100, 0.7)")
+									.attr("stroke-width", strokeSize)
+									.attr("fill", "none");
+							}
+						}
+					
+					}
+				}
+				
+				// Joiners
+				svg.selectAll("join")
+				   .data(start)
+				   .enter()
+				   .append("rect")
+				   .attr("x", function(d, i) {
+						return ( (i+1)*(w/7) ) - ( 0.5*scale(d));
+				   })
+				   .attr("y", h/8)
+				   .attr("width", function(d){
+						if ( (d>0) && (scale(d)<lowThresh) ) return lowThresh;
+						else return scale(d);
+				   })
+				   .attr("height", (3*h)/8)
+				   .attr("fill", "rgba(100, 100, 100, 0.7)");
+			
+				
+				// Leavers
+				svg.selectAll("leave")
+				   .data(finish)
+				   .enter()
+				   .append("rect")
+				   .attr("x", function(d, i) {
+						return ( (i+1)*(w/7) ) - ( 0.5*scale(d));
+				   })
+				   .attr("y", h/2)
+				   .attr("width", function(d){
+						if ( (d>0) && (scale(d)<lowThresh) ) return lowThresh;
+						else return scale(d);
+				   })
+				   .attr("height", (3*h)/8)
+				   .attr("fill", "rgba(100, 100, 100, 0.7)");
+				
+				// In state
+				svg.selectAll("in")
+					.data(did)
+					.enter()
+					.append("circle")
+					.attr("cx", function(d, i) {
+						return (i+1)*(w/7);
+					})
+					.attr("cy", h/2)
+					.attr("r", function(d){
+						return scale(d/2);
+					})
+					.attr("fill", "rgb(255, 255, 255)")
+					.attr("stroke", "rgb(100, 100, 100)");
+					
+				// Unit labels
+				svg.selectAll("labels")
+					.data(did)
+					.enter()
+					.append("text")
+					.text(function(d){
+						return d;
+					})
+					.attr("x", function(d, i) {
+						return ((i+1)*(w/7))-9;
+					})
+					.attr("y", (h/2)+4)
+					.attr("font-family", "sans-serif")
+					.attr("font-size", "11px")
+					.attr("fill", "black");
+			
+			}); // End of data
+			
+			
+	
+        </script>
+    </body>
+</html>  
